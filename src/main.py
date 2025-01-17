@@ -45,7 +45,7 @@ def list_containers():
             # podman-docker package is installed for docker.sock compatibility
             logger.error(f"{socket_uri} connection error.")
             raise HTTPException(status_code=500, detail="podman.sock connection error")
-    return client.df()["Containers"]
+        return client.df()["Containers"]
 
 @app.get("/api/podman-status", response_model=Dict[str, str])
 def container_status():
@@ -55,9 +55,12 @@ def container_status():
             logger.error(f"{socket_uri} connection error.")
             raise HTTPException(status_code=500, detail="podman.sock connection error")
         for container in client.containers.list():
-            container.reload()
+            try:
+                container.reload()
+            except Exception:
+                raise HTTPException(status_code=500, detail=f"Unknown error on container reload")
             status_collection[container.name] = container.status
-    return status_collection
+        return status_collection
 
 @app.get("/api/podman-status/{cname}", response_model=str)
 def container_status(cname: str):
@@ -66,4 +69,9 @@ def container_status(cname: str):
             logger.error(f"{socket_uri} connection error.")
             raise HTTPException(status_code=500, detail="podman.sock connection error")
         quickstatus = filter(lambda x: x["Names"] == cname, client.df()["Containers"])
-    return str(next(quickstatus)["Status"])
+        try:
+            return str(next(quickstatus)["Status"])
+        except StopIteration:
+            raise HTTPException(status_code=404, detail=f"No status for container {cname}")
+        except Exception:
+            raise HTTPException(status_code=500, detail=f"Unknown error retrieving status")
